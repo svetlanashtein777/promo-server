@@ -1,30 +1,135 @@
-// ...всё до этого без изменений
+import express from 'express';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import cors from 'cors';
+import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
-// Promo route — сохранить
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+
+// Подключение к MongoDB
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch((err) => console.error('❌ MongoDB error:', err));
+
+// Настройка Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'products',
+    allowed_formats: ['jpg', 'png', 'jpeg'],
+  },
+});
+
+const upload = multer({ storage });
+
+// ─── СХЕМЫ ───────────────────────────────
+
+const productSchema = new mongoose.Schema({
+  name: String,
+  description: String,
+  price: Number,
+  link: String,
+  visible: Boolean,
+  images: [String],
+});
+
+const promoSchema = new mongoose.Schema({
+  text: String,
+  promo_code: String,
+  image_url: String,
+  expires_at: Date,
+});
+
+const Product = mongoose.model('Product', productSchema);
+const Promo = mongoose.model('Promo', promoSchema);
+
+// ─── ROUTES ───────────────────────────────
+
+// Продукты
+app.get('/products', async (req, res) => {
+  const products = await Product.find();
+  res.json(products);
+});
+
+app.post('/products', upload.array('images', 10), async (req, res) => {
+  const { name, description, price, link } = req.body;
+  const images = req.files.map((file) => file.path);
+
+  const product = new Product({
+    name,
+    description,
+    price,
+    link,
+    visible: true,
+    images,
+  });
+
+  await product.save();
+  res.json({ message: 'Product created', product });
+});
+
+app.delete('/products/:id', async (req, res) => {
+  await Product.findByIdAndDelete(req.params.id);
+  res.json({ message: 'Product deleted' });
+});
+
+app.put('/products/:id', async (req, res) => {
+  const { name, description, price, link } = req.body;
+  await Product.findByIdAndUpdate(req.params.id, { name, description, price, link });
+  res.json({ message: 'Product updated' });
+});
+
+app.patch('/products/:id', async (req, res) => {
+  const { visible } = req.body;
+  await Product.findByIdAndUpdate(req.params.id, { visible });
+  res.json({ message: 'Visibility updated' });
+});
+
+// Промокоды
 app.post('/promo', async (req, res) => {
   try {
-    const { text, promo_code, image_url = '', expires_at } = req.body;
+    const { text, promo_code, image_url, expires_at } = req.body;
 
-    const promo = new Promo({ text, promo_code, image_url, expires_at });
+    const promo = new Promo({
+      text,
+      promo_code,
+      image_url,
+      expires_at,
+    });
 
     await promo.save();
     res.status(201).json({ message: 'Промокод сохранён', promo });
   } catch (err) {
-    console.error('Ошибка при сохранении промокода:', err);
+    console.error(err);
     res.status(500).json({ message: 'Ошибка при сохранении промокода' });
   }
 });
 
-// ✅ Новый маршрут — получить все промокоды
+// Новый маршрут: получить список всех промокодов
 app.get('/promo', async (req, res) => {
   try {
-    const promos = await Promo.find().sort({ expires_at: -1 });
+    const promos = await Promo.find();
     res.json(promos);
   } catch (err) {
-    console.error('Ошибка при получении промокодов:', err);
     res.status(500).json({ message: 'Ошибка при получении промокодов' });
   }
 });
 
-// Старт сервера
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+// ─── СТАРТ СЕРВЕРА ─────────────────────────
+
+app.listen(PORT, () => console.log(`🚀 Server started on port ${PORT}`));
