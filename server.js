@@ -1,76 +1,88 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import cors from 'cors';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
-import cors from 'cors';
 
 dotenv.config();
+
 const app = express();
-app.use(express.json());
+const PORT = process.env.PORT || 3000;
+
 app.use(cors());
+app.use(express.json());
 
-// MongoDB подключение
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('❌ MongoDB error:', err));
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log('MongoDB connected'))
+  .catch((err) => console.error('MongoDB error:', err));
 
-// Cloudinary настройки
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: 'promo_upload',
-    allowed_formats: ['jpg', 'jpeg', 'png'],
+    folder: 'products',
+    allowed_formats: ['jpg', 'png', 'jpeg'],
   },
 });
 
 const upload = multer({ storage });
 
-// Схема MongoDB
 const productSchema = new mongoose.Schema({
   name: String,
   description: String,
-  link: String,
   price: Number,
-  visible: { type: Boolean, default: true },
-  images: [String]
+  link: String,
+  visible: Boolean,
+  images: [String],
 });
 
 const Product = mongoose.model('Product', productSchema);
 
-// Загрузка товара
-app.post('/products', upload.array('images'), async (req, res) => {
-  try {
-    const imageUrls = req.files.map(file => file.path);
-    const product = await Product.create({
-      ...req.body,
-      images: imageUrls
-    });
-    res.status(201).json(product);
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка при создании товара' });
-  }
-});
-
-// Получение всех товаров
 app.get('/products', async (req, res) => {
   const products = await Product.find();
   res.json(products);
 });
 
-// Удаление
-app.delete('/products/:id', async (req, res) => {
-  await Product.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
+app.post('/products', upload.array('images', 10), async (req, res) => {
+  const { name, description, price, link } = req.body;
+  const images = req.files.map((file) => file.path);
+
+  const product = new Product({
+    name,
+    description,
+    price,
+    link,
+    visible: true,
+    images,
+  });
+
+  await product.save();
+  res.json({ message: 'Product created', product });
 });
 
-// Редактирование
+app.delete('/products/:id', async (req, res) => {
+  await Product.findByIdAndDelete(req.params.id);
+  res.json({ message: 'Product deleted' });
+});
+
 app.put('/products/:id', async (req, res) => {
-  const
+  const { name, description, price, link } = req.body;
+  await Product.findByIdAndUpdate(req.params.id, { name, description, price, link });
+  res.json({ message: 'Product updated' });
+});
+
+app.patch('/products/:id', async (req, res) => {
+  const { visible } = req.body;
+  await Product.findByIdAndUpdate(req.params.id, { visible });
+  res.json({ message: 'Visibility updated' });
+});
+
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
