@@ -35,6 +35,7 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage });
 
+// Schema for products
 const productSchema = new mongoose.Schema({
   name: String,
   description: String,
@@ -46,6 +47,17 @@ const productSchema = new mongoose.Schema({
 
 const Product = mongoose.model('Product', productSchema);
 
+// Schema for promo codes
+const promoSchema = new mongoose.Schema({
+  text: String,
+  promo_code: String,
+  image_url: String,
+  expires_at: Date,
+});
+
+const Promo = mongoose.model('Promo', promoSchema);
+
+// Product routes
 app.get('/products', async (req, res) => {
   const products = await Product.find();
   res.json(products);
@@ -83,6 +95,26 @@ app.patch('/products/:id', async (req, res) => {
   const { visible } = req.body;
   await Product.findByIdAndUpdate(req.params.id, { visible });
   res.json({ message: 'Visibility updated' });
+});
+
+// Promo route
+app.post('/promo', async (req, res) => {
+  try {
+    const { text, promo_code, image_url, expires_at } = req.body;
+
+    const promo = new Promo({
+      text,
+      promo_code,
+      image_url,
+      expires_at,
+    });
+
+    await promo.save();
+    res.status(201).json({ message: 'Промокод сохранён', promo });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Ошибка при сохранении промокода' });
+  }
 });
 
 app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
