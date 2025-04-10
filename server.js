@@ -22,7 +22,7 @@ const storage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder: 'promo_uploads',
-    allowed_formats: ['jpg', 'png', 'jpeg'],
+    allowed_formats: ['jpg', 'jpeg', 'png'],
   },
 });
 
@@ -43,8 +43,25 @@ const Promo = mongoose.model('Promo', new mongoose.Schema({
 app.post('/promo', upload.single('image'), async (req, res) => {
   try {
     const { text, promo_code, valid_days } = req.body;
-    const expires_at = new Date(Date.now() + parseInt(valid_days) * 86400000);
+    const expires_at = new Date(Date.now() + parseInt(valid_days) * 24 * 60 * 60 * 1000);
     const image_url = req.file.path;
 
     const promo = await Promo.create({ text, promo_code, image_url, expires_at });
-    res
+    res.status(201).json(promo);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка при сохранении' });
+  }
+});
+
+app.get('/promo', async (req, res) => {
+  try {
+    const promos = await Promo.find().sort({ expires_at: -1 });
+    res.json(promos);
+  } catch (err) {
+    res.status(500).json({ error: 'Ошибка при получении данных' });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✅ Server started on port ${PORT}`));
